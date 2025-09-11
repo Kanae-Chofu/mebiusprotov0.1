@@ -52,7 +52,7 @@ topics = {
 
 # DB初期化
 def init_db():
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users (
                     kari_id TEXT PRIMARY KEY,
@@ -81,7 +81,7 @@ def init_db():
 
 # ユーザー登録・ログイン
 def register_user(kari_id, password):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE kari_id=?", (kari_id,))
     if c.fetchone():
@@ -93,7 +93,7 @@ def register_user(kari_id, password):
     return True
 
 def login_user(kari_id, password):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE kari_id=? AND password=?", (kari_id, password))
     result = c.fetchone()
@@ -102,7 +102,7 @@ def login_user(kari_id, password):
 
 # メッセージ保存・取得
 def save_message(kari_id, partner_id, message, theme=None):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     if theme:
         c.execute("INSERT INTO messages (kari_id, partner_id, message, topic_theme) VALUES (?, ?, ?, ?)",
@@ -114,7 +114,7 @@ def save_message(kari_id, partner_id, message, theme=None):
     conn.close()
 
 def get_messages(kari_id, partner_id):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute('''SELECT kari_id, message FROM messages 
                  WHERE (kari_id=? AND partner_id=?) OR (kari_id=? AND partner_id=?) 
@@ -125,7 +125,7 @@ def get_messages(kari_id, partner_id):
     return messages
 
 def get_shared_theme(kari_id, partner_id):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute('''SELECT topic_theme FROM messages 
                  WHERE ((kari_id=? AND partner_id=?) OR (kari_id=? AND partner_id=?)) 
@@ -138,7 +138,7 @@ def get_shared_theme(kari_id, partner_id):
 
 # 友達申請・承認・取得
 def send_friend_request(from_id, to_id):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute("SELECT * FROM friend_requests WHERE from_id=? AND to_id=?", (from_id, to_id))
     if c.fetchone():
@@ -150,7 +150,7 @@ def send_friend_request(from_id, to_id):
     return True
 
 def get_received_requests(my_id):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute("SELECT from_id FROM friend_requests WHERE to_id=? AND status='pending'", (my_id,))
     requests = c.fetchall()
@@ -158,7 +158,7 @@ def get_received_requests(my_id):
     return [r[0] for r in requests]
 
 def approve_friend_request(my_id, from_id):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute("UPDATE friend_requests SET status='approved' WHERE from_id=? AND to_id=?", (from_id, my_id))
     c.execute("INSERT OR IGNORE INTO friends (user, friend) VALUES (?, ?)", (my_id, from_id))
@@ -167,7 +167,7 @@ def approve_friend_request(my_id, from_id):
     conn.close()
 
 def get_friends(my_id):
-    conn = sqlite3.connect("db/chat.db")
+    conn = sqlite3.connect("db/karitunagari.db")
     c = conn.cursor()
     c.execute("SELECT friend FROM friends WHERE user=?", (my_id,))
     friends = c.fetchall()
