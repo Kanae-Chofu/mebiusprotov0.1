@@ -74,7 +74,7 @@ def login_user(username, password):
     c.execute("SELECT password FROM users WHERE username = ?", (username,))
     result = c.fetchone()
     conn.close()
-    if result and bcrypt.checkpw(password.encode(), result[0]):
+    if result and bcrypt.checkpw(password.encode("utf-8"), result[0].encode("utf-8")):
         return True
     return False
 
