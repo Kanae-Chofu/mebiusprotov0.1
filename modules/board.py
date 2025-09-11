@@ -6,7 +6,7 @@ import os
 import re
 import bcrypt
 
-DB_FILE = "board.db"
+DB_FILE = "db/board.db"
 ADMIN_USER = "admin"
 ADMIN_PASS = "admin123"
 
