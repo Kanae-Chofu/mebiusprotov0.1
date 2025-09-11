@@ -231,7 +231,8 @@ def rules_box():
         )
 
 def main():
-    st.set_page_config(page_title="匿名チャット（デモ）", page_icon="💬", layout="centered")
+    #st.set_page_config(page_title="匿名チャット（デモ）", page_icon="💬", layout="centered")
+    #統合環境に不要st.set_page_configはいらない
     st.title("匿名チャット（デモ版）")
     rules_box()
 
