@@ -136,7 +136,7 @@ def render():
     if menu == "新規登録":
         st.subheader("🆕 新規登録")
         new_user = st.text_input("ユーザー名を入力")
-        new_pass = st.text_input("パスワードを入力", type="password", key="reg_pass")
+        new_pass = st.text_input("パスワードを入力", type="password", key="reg_pass2")
         if st.button("登録", use_container_width=True):
             if register_user(new_user, new_pass):
                 st.success("登録成功！ログインしてください")
