@@ -7,69 +7,67 @@ from streamlit_autorefresh import st_autorefresh
 st.markdown(
     """
     <style>
-    body, .stApp {
-        background-color: #000000;
-        color: #FFFFFF;
-    }
-    div[data-testid="stHeader"] {
-        background-color: #000000;
-    }
-    div[data-testid="stToolbar"] {
-        display: none;
-    }
-    input, textarea {
-        background-color: #1F2F54 !important;
-        color: #FFFFFF !important;
-    }
-    button {
-        background-color: #426AB3 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
+    body, .stApp { background-color: #000000; color: #FFFFFF; }
+    div[data-testid="stHeader"] { background-color: #000000; }
+    div[data-testid="stToolbar"] { display: none; }
+    input, textarea { background-color: #1F2F54 !important; color: #FFFFFF !important; }
+    button { background-color: #426AB3 !important; color: #FFFFFF !important; border: none !important; }
     </style>
     """,
     unsafe_allow_html=True
 )
 
+# DBパス統一
+DB_PATH = "db/chat.db"
+
 # データベース初期化
 def init_db():
-    conn = sqlite3.connect("db/chat.db")  # ← db/ に移動している場合はパス変更
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE,
-                    password TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sender TEXT,
-                    receiver TEXT,
-                    message TEXT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS friends (
-                    user TEXT,
-                    friend TEXT,
-                    UNIQUE(user, friend))''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender TEXT,
+            receiver TEXT,
+            message TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS friends (
+            user TEXT,
+            friend TEXT,
+            UNIQUE(user, friend)
+        )
+    ''')
     conn.commit()
     conn.close()
 
-# 各機能関数（register_user, login_user, save_message, get_messages, add_friend, get_friends）←そのままでOK
 # ユーザー登録
 def register_user(username, password):
-    conn = sqlite3.connect("chat.db")
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     hashed_pw = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
     try:
         c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_pw))
         conn.commit()
         return True
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
+        st.error(f"登録失敗: {e}")
         return False
     finally:
         conn.close()
 
 # ログイン
 def login_user(username, password):
-    conn = sqlite3.connect("chat.db")
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT password FROM users WHERE username = ?", (username,))
     result = c.fetchone()
@@ -80,7 +78,7 @@ def login_user(username, password):
 
 # メッセージ保存
 def save_message(sender, receiver, message):
-    conn = sqlite3.connect("chat.db")
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("INSERT INTO messages (sender, receiver, message) VALUES (?, ?, ?)", (sender, receiver, message))
     conn.commit()
@@ -88,19 +86,20 @@ def save_message(sender, receiver, message):
 
 # メッセージ取得
 def get_messages(user, partner):
-    conn = sqlite3.connect("chat.db")
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''SELECT sender, message, timestamp FROM messages 
-                 WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) 
-                 ORDER BY timestamp''',
-              (user, partner, partner, user))
+    c.execute('''
+        SELECT sender, message, timestamp FROM messages 
+        WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) 
+        ORDER BY timestamp
+    ''', (user, partner, partner, user))
     messages = c.fetchall()
     conn.close()
     return messages
 
 # 友達追加
 def add_friend(user, friend):
-    conn = sqlite3.connect("chat.db")
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     try:
         c.execute("INSERT INTO friends (user, friend) VALUES (?, ?)", (user, friend))
@@ -113,14 +112,14 @@ def add_friend(user, friend):
 
 # 友達一覧取得
 def get_friends(user):
-    conn = sqlite3.connect("chat.db")
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT friend FROM friends WHERE user = ?", (user,))
     friends = [row[0] for row in c.fetchall()]
     conn.close()
     return friends
 
-# ✅ 統合用の render 関数
+# --------------------- Streamlit UI ---------------------
 def render():
     init_db()
     st.title("1対1チャットSNSメビウス（α版）")
@@ -141,7 +140,7 @@ def render():
             if register_user(new_user, new_pass):
                 st.success("登録成功！ログインしてください")
             else:
-                st.error("このユーザー名は既に使われています")
+                st.error("このユーザー名は既に使われているか、登録に失敗しました")
 
     elif menu == "ログイン":
         st.subheader("🔐 ログイン")
@@ -181,31 +180,24 @@ def render():
         if st.session_state.partner:
             messages = get_messages(st.session_state.username, st.session_state.partner)
             for sender, msg, _ in messages:
-                if sender == st.session_state.username:
-                    st.markdown(
-                        f"""
-                        <div style='text-align: right; margin: 5px 0;'>
-                            <span style='background-color:#1F2F54; color:#FFFFFF; padding:8px 12px; border-radius:10px; display:inline-block; max-width:80%;'>
-                                {msg}
-                            </span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown(
-                        f"""
-                        <div style='text-align: left; margin: 5px 0;'>
-                            <span style='background-color:#426AB3; color:#FFFFFF; padding:8px 12px; border-radius:10px; display:inline-block; max-width:80%; border:1px solid #ccc;'>
-                                {msg}
-                            </span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                align = "right" if sender == st.session_state.username else "left"
+                color = "#1F2F54" if sender == st.session_state.username else "#426AB3"
+                st.markdown(
+                    f"""
+                    <div style='text-align: {align}; margin:5px 0;'>
+                        <span style='background-color:{color}; color:#FFFFFF; padding:8px 12px; border-radius:10px; display:inline-block; max-width:80%;'>
+                            {msg}
+                        </span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-            # ✉️ メッセージ送信（← 佳苗さんが言っていた末尾）
             new_message = st.chat_input("メッセージを入力")
             if new_message:
                 save_message(st.session_state.username, st.session_state.partner, new_message)
                 st.rerun()
+
+# 実行
+if __name__ == "__main__":
+    render()
