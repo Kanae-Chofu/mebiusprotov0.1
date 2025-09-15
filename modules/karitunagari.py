@@ -208,25 +208,32 @@ def render():
             chat_box = st.empty()
             with chat_box:
                 messages = get_messages(st.session_state.kari_id, partner)
-                for sender, msg in messages:
-                    align = "right" if sender == st.session_state.kari_id else "left"
-                    bg = "#1F2F54" if align == "right" else "#426AB3"
-                    st.markdown(
-                        f"""
-                        <div style='text-align: {align}; margin: 5px 0;'>
-                            <span style='background-color:{bg}; color:#FFFFFF; padding:8px 12px; border-radius:10px; display:inline-block; max-width:80%;'>
-                                {msg}
-                            </span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
 
-            new_message = st.chat_input("メッセージを入力")
-            if new_message:
-                theme_to_save = get_shared_theme(st.session_state.kari_id, partner)
-                if not theme_to_save and "shared_theme" in st.session_state:
-                    theme_to_save = st.session_state.shared_theme
+    for sender, msg in messages:
+        align = "right" if sender == st.session_state.kari_id else "left"
+        bg = "#1F2F54" if align == "right" else "#426AB3"
+        
+        # 🔧 ここで改行をHTMLの <br> に変換
+        msg_html = msg.replace("\n", "<br>")
+        
+        st.markdown(
+            f"""
+            <div style='text-align: {align}; margin: 5px 0;'>
+                <span style='background-color:{bg}; color:#FFFFFF; padding:8px 12px; border-radius:10px; display:inline-block; max-width:80%;'>
+                    {msg_html}
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+
+        new_message = st.chat_input("メッセージを入力")
+        if new_message:
+            theme_to_save = get_shared_theme(st.session_state.kari_id, partner)
+            if not theme_to_save and "shared_theme" in st.session_state:
+                theme_to_save = st.session_state.shared_theme
                 save_message(st.session_state.kari_id, partner, new_message, theme_to_save)
                 st.rerun()
 
