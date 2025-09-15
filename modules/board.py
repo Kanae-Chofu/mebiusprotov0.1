@@ -23,18 +23,14 @@ def is_bcrypt_hash(value: str) -> bool:
     return isinstance(value, str) and value.startswith("$2")
 
 def sanitize_message(text: str, max_len: int) -> str:
-    # 改行/リンク/画像引用は初期は不要 → 改行はスペースに置換、URLはそのまま文字列として保存
     text = text.replace("\r", " ").replace("\n", " ")
     text = re.sub(r"\s+", " ", text).strip()
-    if len(text) > max_len:
-        text = text[:max_len]
-    return text
+    return text[:max_len]
 
 # -------------------------------
-# DB 接続ヘルパ
+# DB 接続と初期化
 # -------------------------------
 def get_conn():
-    # 同時アクセス耐性を上げるため WAL を使う
     new_db = not os.path.exists(DB_FILE)
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL;")
@@ -43,14 +39,10 @@ def get_conn():
         conn.commit()
     return conn
 
-# -------------------------------
-# スキーマ初期化 / マイグレーション
-# -------------------------------
 def init_db():
     conn = get_conn()
     c = conn.cursor()
 
-    # tables
     c.execute("""
         CREATE TABLE IF NOT EXISTS threads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,29 +66,14 @@ def init_db():
         )
     """)
 
-    # デフォルトスレ
-    c.execute(
-        "INSERT OR IGNORE INTO threads (id, title, created_at) VALUES (1, ?, ?)",
-        ("雑談スレ", now_str())
-    )
+    c.execute("INSERT OR IGNORE INTO threads (id, title, created_at) VALUES (1, ?, ?)", ("雑談スレ", now_str()))
 
-    # admin 登録（ハッシュで保持）
     c.execute("SELECT password FROM users WHERE username=?", (ADMIN_USER,))
     row = c.fetchone()
     if row is None:
-        c.execute(
-            "INSERT INTO users (username, password) VALUES (?, ?)",
-            (ADMIN_USER, hash_password(ADMIN_PASS))
-        )
-    else:
-        # 既存が平文ならハッシュへ置き換え
-        stored = row[0]
-        if not is_bcrypt_hash(stored):
-            if stored == ADMIN_PASS:
-                c.execute(
-                    "UPDATE users SET password=? WHERE username=?",
-                    (hash_password(ADMIN_PASS), ADMIN_USER)
-                )
+        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (ADMIN_USER, hash_password(ADMIN_PASS)))
+    elif not is_bcrypt_hash(row[0]) and row[0] == ADMIN_PASS:
+        c.execute("UPDATE users SET password=? WHERE username=?", (hash_password(ADMIN_PASS), ADMIN_USER))
 
     conn.commit()
     conn.close()
@@ -116,60 +93,55 @@ def check_user(username: str, password: str) -> bool:
     stored = row[0]
     ok = False
     if is_bcrypt_hash(stored):
-        try:
-            ok = bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
-        except Exception:
-            ok = False
+        ok = bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
     else:
-        # 平文時代の互換：一致したらハッシュに置換して以後はハッシュ運用
         ok = (stored == password)
         if ok:
-            c.execute(
-                "UPDATE users SET password=? WHERE username=?",
-                (hash_password(password), username)
-            )
+            c.execute("UPDATE users SET password=? WHERE username=?", (hash_password(password), username))
             conn.commit()
     conn.close()
     return ok
 
-def register_user(username: str, password: str) -> bool:
+def register_user(username: str, password: str) -> str:
+    username = username.strip()
+    password = password.strip()
     if not username or not password:
-        return False
+        return "ユーザー名とパスワードを入力してください。"
+
     conn = get_conn()
     c = conn.cursor()
     try:
-        c.execute(
-            "INSERT INTO users (username, password) VALUES (?, ?)",
-            (username, hash_password(password))
-        )
+        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hash_password(password)))
         conn.commit()
         conn.close()
-        return True
-    except sqlite3.IntegrityError:
+        return "OK"
+    except sqlite3.IntegrityError as e:
         conn.close()
-        return False
+        return f"登録に失敗しました（既に存在 or DBエラー）: {str(e)}"
+
+def list_users():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT username FROM users")
+    rows = c.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
 
 # -------------------------------
-# メッセージ
+# メッセージ・スレッド処理
 # -------------------------------
 def save_message(username: str, message: str, thread_id: int):
     conn = get_conn()
     c = conn.cursor()
-    c.execute(
-        "INSERT INTO messages (username, message, timestamp, thread_id) VALUES (?, ?, ?, ?)",
-        (username, message, now_str(), thread_id)
-    )
+    c.execute("INSERT INTO messages (username, message, timestamp, thread_id) VALUES (?, ?, ?, ?)",
+              (username, message, now_str(), thread_id))
     conn.commit()
     conn.close()
 
 def load_messages(thread_id: int):
     conn = get_conn()
     c = conn.cursor()
-    # Twitter型（新しい順）：id DESC
-    c.execute(
-        "SELECT id, username, message, timestamp FROM messages WHERE thread_id=? ORDER BY id DESC",
-        (thread_id,)
-    )
+    c.execute("SELECT id, username, message, timestamp FROM messages WHERE thread_id=? ORDER BY id DESC", (thread_id,))
     rows = c.fetchall()
     conn.close()
     return rows
@@ -188,18 +160,12 @@ def delete_all_messages():
     conn.commit()
     conn.close()
 
-# -------------------------------
-# スレッド
-# -------------------------------
 def load_threads(keyword: str = ""):
     conn = get_conn()
     c = conn.cursor()
     if keyword:
         like = f"%{keyword}%"
-        c.execute(
-            "SELECT id, title, created_at FROM threads WHERE title LIKE ? ORDER BY id DESC",
-            (like,)
-        )
+        c.execute("SELECT id, title, created_at FROM threads WHERE title LIKE ? ORDER BY id DESC", (like,))
     else:
         c.execute("SELECT id, title, created_at FROM threads ORDER BY id DESC")
     rows = c.fetchall()
@@ -209,10 +175,7 @@ def load_threads(keyword: str = ""):
 def create_thread(title: str):
     conn = get_conn()
     c = conn.cursor()
-    c.execute(
-        "INSERT INTO threads (title, created_at) VALUES (?, ?)",
-        (title, now_str())
-    )
+    c.execute("INSERT INTO threads (title, created_at) VALUES (?, ?)", (title, now_str()))
     conn.commit()
     conn.close()
 
@@ -221,28 +184,22 @@ def create_thread(title: str):
 # -------------------------------
 def rules_box():
     with st.expander("掲示板ルール", expanded=True):
-        st.markdown(
-            """
+        st.markdown("""
 - 誹謗中傷・個人情報の投稿は禁止
 - スレッド名は **64文字まで**／メッセージは **150文字まで**
 - 画像・リンク貼付・改行はサポート外（テキストのみ）
 - 管理者が不適切な投稿を削除する場合があります
-            """
-        )
+        """)
 
 def main():
-    #st.set_page_config(page_title="匿名チャット（デモ）", page_icon="💬", layout="centered")
-    #統合環境に不要st.set_page_configはいらない
     st.title("匿名チャット（デモ版）")
     rules_box()
 
-    # セッション初期化
     if "user" not in st.session_state:
         st.session_state.user = None
     if "thread_id" not in st.session_state:
         st.session_state.thread_id = None
 
-    # ---------------- ログイン/登録 ----------------
     if st.session_state.user is None:
         st.subheader("ログイン")
         login_user = st.text_input("ユーザー名", key="login_user")
@@ -259,13 +216,13 @@ def main():
         new_user = st.text_input("新しいユーザー名", key="reg_user")
         new_pass = st.text_input("新しいパスワード", type="password", key="reg_pass")
         if st.button("登録"):
-            if register_user(new_user, new_pass):
+            result = register_user(new_user, new_pass)
+            if result == "OK":
                 st.success(f"{new_user} を登録しました。ログインしてください。")
             else:
-                st.error("登録に失敗しました（既に存在 or 未入力）")
+                st.error(result)
         return
 
-    # ---------------- ログアウト ----------------
     cols = st.columns([1,1,4])
     with cols[0]:
         if st.button("ログアウト"):
@@ -274,28 +231,26 @@ def main():
             st.rerun()
     with cols[1]:
         st.write(f"**ログイン中:** {st.session_state.user}")
+    with cols[2]:
+        if st.session_state.user == ADMIN_USER:
+            st.caption("登録済みユーザー一覧:")
+            st.code("\n".join(list_users()))
 
-    # ---------------- スレ一覧（未選択時） ----------------
     if st.session_state.thread_id is None:
         st.subheader("スレ一覧")
-
-        # 検索
         keyword = st.text_input("スレッド検索（部分一致）", key="thread_search")
         threads = load_threads(keyword.strip())
 
-        # 新規作成（64文字制限）
         st.markdown("#### 新しいスレを作成")
         new_thread = st.text_input("スレッド名（64文字まで）", key="thread_title_input", max_chars=64)
-        create_col1, create_col2 = st.columns([3,1])
-        with create_col2:
-            if st.button("作成"):
-                title = sanitize_message(new_thread, 64)
-                if not title:
-                    st.warning("スレッド名を入力してください。")
-                else:
-                    create_thread(title)
-                    st.success("スレを作成しました")
-                    st.rerun()
+        if st.button("作成"):
+            title = sanitize_message(new_thread, 64)
+            if not title:
+                st.warning("スレッド名を入力してください。")
+            else:
+                create_thread(title)
+                st.success("スレを作成しました")
+                st.rerun()
 
         st.markdown("---")
         if not threads:
@@ -307,20 +262,20 @@ def main():
                     st.rerun()
         return
 
-    # ---------------- スレ表示（選択後） ----------------
+    # ---------------- スレッド表示 ----------------
     st.subheader(f"スレッドID: {st.session_state.thread_id}")
     if st.button("← スレ一覧へ戻る"):
         st.session_state.thread_id = None
         st.rerun()
 
-    # 管理者だけ全削除
+    # 管理者による全削除
     if st.session_state.user == ADMIN_USER:
-        if st.button("このアプリの全メッセージを削除（管理者）"):
+        if st.button("このスレの全メッセージを削除（管理者）"):
             delete_all_messages()
             st.success("チャット履歴をすべて削除しました")
             st.rerun()
 
-    # 送信ハンドラ（Enter とボタンの両方から呼ぶ）
+    # メッセージ送信処理
     def handle_send():
         raw = st.session_state.input_message
         msg = sanitize_message(raw, 150)
@@ -328,9 +283,9 @@ def main():
             st.warning("メッセージを入力してください（150文字まで）。")
             return
         save_message(st.session_state.user, msg, st.session_state.thread_id)
-        st.session_state.input_message = ""  # 入力欄クリア
+        st.session_state.input_message = ""
 
-    # 入力（Enterで送信可 / ボタンでも送信可）
+    # メッセージ入力欄
     st.text_input(
         "メッセージ（150文字まで）",
         key="input_message",
@@ -340,7 +295,7 @@ def main():
     if st.button("送信"):
         handle_send()
 
-    # 履歴表示（新しい順）
+    # メッセージ履歴表示
     st.markdown("---")
     messages = load_messages(st.session_state.thread_id)
     if not messages:
@@ -353,6 +308,13 @@ def main():
                     delete_message(msg_id)
                     st.rerun()
 
+# -------------------------------
+# 実行
+# -------------------------------
 def render():
     init_db()
     main()
+
+# Streamlit 実行
+if __name__ == "__main__":
+    render()
