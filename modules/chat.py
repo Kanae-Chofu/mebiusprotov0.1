@@ -14,7 +14,6 @@ button { background-color: #426AB3 !important; color: #FFFFFF !important; border
 </style>
 """, unsafe_allow_html=True)
 
-# DBパス
 DB_PATH = "db/chat.db"
 
 # 🔧 データベース初期化
@@ -59,7 +58,7 @@ def login_user(username, password):
     c.execute("SELECT password FROM users WHERE username = ?", (username,))
     result = c.fetchone()
     conn.close()
-    if result and bcrypt.checkpw(password.encode("utf-8"), result[0].encode("utf-8")):
+    if result and bcrypt.checkpw(password.encode("utf-8"), result[0]):
         return True
     return False
 
@@ -106,7 +105,6 @@ def get_friends(user):
 def render():
     init_db()
     st.title("1対1チャットSNSメビウス（α版）")
-    #st_autorefresh(interval=5000, key="chat_autorefresh")
 
     if "username" not in st.session_state:
         st.session_state.username = None
@@ -117,9 +115,9 @@ def render():
 
     if menu == "新規登録":
         st.subheader("🆕 新規登録")
-        new_user = st.text_input("ユーザー名を入力", key="reg_user")
-        new_pass = st.text_input("パスワードを入力", type="password", key="reg_pass")
-        if st.button("登録", use_container_width=True):
+        new_user = st.text_input("ユーザー名を入力", key="register_username")
+        new_pass = st.text_input("パスワードを入力", type="password", key="register_password")
+        if st.button("登録", key="register_button"):
             if register_user(new_user, new_pass):
                 st.success("登録成功！ログインしてください")
             else:
@@ -127,9 +125,9 @@ def render():
 
     elif menu == "ログイン":
         st.subheader("🔐 ログイン")
-        user = st.text_input("ユーザー名", key="login_user")
-        pw = st.text_input("パスワード", type="password", key="login_pass")
-        if st.button("ログイン", use_container_width=True):
+        user = st.text_input("ユーザー名", key="login_username")
+        pw = st.text_input("パスワード", type="password", key="login_password")
+        if st.button("ログイン", key="login_button"):
             if login_user(user, pw):
                 st.session_state.username = user
                 st.success(f"{user} でログインしました！")
@@ -149,12 +147,12 @@ def render():
             else:
                 st.info("まだ友達はいません。ユーザー名を入力して友達追加してください。")
 
-        partner = st.text_input("チャット相手のユーザー名を入力", st.session_state.partner or "", key="partner_input")
+        partner = st.text_input("チャット相手のユーザー名を入力", key="chat_partner_input")
         if partner:
             st.session_state.partner = partner
             st.write(f"チャット相手: `{partner}`")
 
-            if st.button("このユーザーを友達に追加", use_container_width=True):
+            if st.button("このユーザーを友達に追加", key="add_friend_button"):
                 if add_friend(st.session_state.username, partner):
                     st.success(f"{partner} を友達に追加しました！")
                 else:
