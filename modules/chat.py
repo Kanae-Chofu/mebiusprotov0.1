@@ -106,7 +106,7 @@ def get_friends(user):
 def render():
     init_db()
     st.title("1対1チャットSNSメビウス（α版）")
-    st_autorefresh(interval=5000, key="chat_autorefresh")
+    #st_autorefresh(interval=5000, key="chat_autorefresh")
 
     if "username" not in st.session_state:
         st.session_state.username = None
