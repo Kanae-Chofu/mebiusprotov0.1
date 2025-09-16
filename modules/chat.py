@@ -3,54 +3,42 @@ import sqlite3
 import bcrypt
 from streamlit_autorefresh import st_autorefresh
 
-# 🌙 ダークモード固定＋背景色変更
-st.markdown(
-    """
-    <style>
-    body, .stApp { background-color: #000000; color: #FFFFFF; }
-    div[data-testid="stHeader"] { background-color: #000000; }
-    div[data-testid="stToolbar"] { display: none; }
-    input, textarea { background-color: #1F2F54 !important; color: #FFFFFF !important; }
-    button { background-color: #426AB3 !important; color: #FFFFFF !important; border: none !important; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# 🌙 ダークモード固定
+st.markdown("""
+<style>
+body, .stApp { background-color: #000000; color: #FFFFFF; }
+div[data-testid="stHeader"] { background-color: #000000; }
+div[data-testid="stToolbar"] { display: none; }
+input, textarea { background-color: #1F2F54 !important; color: #FFFFFF !important; }
+button { background-color: #426AB3 !important; color: #FFFFFF !important; border: none !important; }
+</style>
+""", unsafe_allow_html=True)
 
-# DBパス統一
+# DBパス
 DB_PATH = "db/chat.db"
 
-# データベース初期化
+# 🔧 データベース初期化
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sender TEXT,
-            receiver TEXT,
-            message TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS friends (
-            user TEXT,
-            friend TEXT,
-            UNIQUE(user, friend)
-        )
-    ''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender TEXT,
+        receiver TEXT,
+        message TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS friends (
+        user TEXT,
+        friend TEXT,
+        UNIQUE(user, friend))''')
     conn.commit()
     conn.close()
 
-# ユーザー登録
+# 🆕 ユーザー登録
 def register_user(username, password):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -59,13 +47,12 @@ def register_user(username, password):
         c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_pw))
         conn.commit()
         return True
-    except sqlite3.IntegrityError as e:
-        st.error(f"登録失敗: {e}")
+    except sqlite3.IntegrityError:
         return False
     finally:
         conn.close()
 
-# ログイン
+# 🔐 ログイン
 def login_user(username, password):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -76,7 +63,7 @@ def login_user(username, password):
         return True
     return False
 
-# メッセージ保存
+# 💬 メッセージ保存・取得
 def save_message(sender, receiver, message):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -84,20 +71,17 @@ def save_message(sender, receiver, message):
     conn.commit()
     conn.close()
 
-# メッセージ取得
 def get_messages(user, partner):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''
-        SELECT sender, message, timestamp FROM messages 
-        WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) 
-        ORDER BY timestamp
-    ''', (user, partner, partner, user))
+    c.execute('''SELECT sender, message, timestamp FROM messages
+                 WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
+                 ORDER BY timestamp''', (user, partner, partner, user))
     messages = c.fetchall()
     conn.close()
     return messages
 
-# 友達追加
+# 👥 友達追加・取得
 def add_friend(user, friend):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -110,7 +94,6 @@ def add_friend(user, friend):
     finally:
         conn.close()
 
-# 友達一覧取得
 def get_friends(user):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -119,7 +102,7 @@ def get_friends(user):
     conn.close()
     return friends
 
-# --------------------- Streamlit UI ---------------------
+# 🖥 メイン画面
 def render():
     init_db()
     st.title("1対1チャットSNSメビウス（α版）")
@@ -134,18 +117,18 @@ def render():
 
     if menu == "新規登録":
         st.subheader("🆕 新規登録")
-        new_user = st.text_input("ユーザー名を入力")
-        new_pass = st.text_input("パスワードを入力", type="password", key="reg_pass2")
+        new_user = st.text_input("ユーザー名を入力", key="reg_user")
+        new_pass = st.text_input("パスワードを入力", type="password", key="reg_pass")
         if st.button("登録", use_container_width=True):
             if register_user(new_user, new_pass):
                 st.success("登録成功！ログインしてください")
             else:
-                st.error("このユーザー名は既に使われているか、登録に失敗しました")
+                st.error("このユーザー名は既に使われています")
 
     elif menu == "ログイン":
         st.subheader("🔐 ログイン")
-        user = st.text_input("ユーザー名")
-        pw = st.text_input("パスワード", type="password")
+        user = st.text_input("ユーザー名", key="login_user")
+        pw = st.text_input("パスワード", type="password", key="login_pass")
         if st.button("ログイン", use_container_width=True):
             if login_user(user, pw):
                 st.session_state.username = user
@@ -166,7 +149,7 @@ def render():
             else:
                 st.info("まだ友達はいません。ユーザー名を入力して友達追加してください。")
 
-        partner = st.text_input("チャット相手のユーザー名を入力", st.session_state.partner or "")
+        partner = st.text_input("チャット相手のユーザー名を入力", st.session_state.partner or "", key="partner_input")
         if partner:
             st.session_state.partner = partner
             st.write(f"チャット相手: `{partner}`")
@@ -175,7 +158,7 @@ def render():
                 if add_friend(st.session_state.username, partner):
                     st.success(f"{partner} を友達に追加しました！")
                 else:
-                    st.info(f"{partner} はすでに友達に追加されています")
+                    st.info(f"{partner} はすでに友達です")
 
         if st.session_state.partner:
             messages = get_messages(st.session_state.username, st.session_state.partner)
