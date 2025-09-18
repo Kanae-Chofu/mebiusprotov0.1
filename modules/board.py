@@ -1,4 +1,4 @@
-# app.py
+# board.py
 import streamlit as st
 import sqlite3
 import datetime
